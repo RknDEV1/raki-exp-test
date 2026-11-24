@@ -1,54 +1,54 @@
-name: Build unsigned IPA
-
-on:
-  workflow_dispatch:
-  push:
-    branches:
-      - main
-
-permissions:
-  contents: read
+name: Build iOS with Worse_Query
+on: [push, workflow_dispatch]
 
 jobs:
   build:
-    name: Build iOS IPA
-    runs-on: macos-15
+    runs-on: macos-latest
     steps:
-      - name: Check out repository
+      - name: Checkout Repo
         uses: actions/checkout@v4
 
-      - name: Show Xcode version
-        run: xcodebuild -version
-
-      - name: Build unsigned iOS app
+      - name: Extract Exploit
         run: |
-          set -o pipefail
-          xcodebuild \
-            -project ThreeOneOSFive.xcodeproj \
-            -scheme 3105 \
-            -configuration Release \
-            -destination 'generic/platform=iOS' \
-            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            build
+          mkdir -p ThreeOneOSFive/worse_query
+          unzip -o worse_query.zip -d ThreeOneOSFive/worse_query/ || true
+          if [ -d "ThreeOneOSFive/worse_query/worse_query-main" ]; then mv ThreeOneOSFive/worse_query/worse_query-main/* ThreeOneOSFive/worse_query/; fi
 
-      - name: Package IPA
+      - name: Install Ruby Gem
+        run: gem install xcodeproj
+
+      - name: Run Grok Script
         run: |
-          set -euo pipefail
-          APP_PATH="$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos/3105.app"
-          test -d "$APP_PATH"
-          mkdir -p "$RUNNER_TEMP/ipa/Payload" "$GITHUB_WORKSPACE/build"
-          cp -R "$APP_PATH" "$RUNNER_TEMP/ipa/Payload/3105.app"
-          (cd "$RUNNER_TEMP/ipa" && /usr/bin/zip -qry "$GITHUB_WORKSPACE/build/3105-unsigned.ipa" Payload)
-          /usr/bin/unzip -t "$GITHUB_WORKSPACE/build/3105-unsigned.ipa"
-          ls -lh "$GITHUB_WORKSPACE/build/3105-unsigned.ipa"
+          cat << 'EOF' > add_worse_query.rb
+          require 'xcodeproj'
+          require 'pathname'
+          PROJECT_PATH = File.expand_path('ThreeOneOSFive.xcodeproj', __dir__)
+          TARGET_NAME  = '3105'
+          EXPLOIT_REL  = 'ThreeOneOSFive/worse_query'
+          project = Xcodeproj::Project.open(PROJECT_PATH)
+          target  = project.targets.find { |t| t.name == TARGET_NAME } || project.targets.first
+          proj_dir = Pathname.new(PROJECT_PATH).parent
+          exploit_fs = proj_dir.join(EXPLOIT_REL)
+          sources = Dir.glob(exploit_fs.join('**', '*')).select { |p| %w[.c .m .mm .cpp].include?(File.extname(p).downcase) }
+          sources.each do |src|
+            base = File.basename(src)
+            next if target.source_build_phase.files.any? { |bf| bf.file_ref&.path&.end_with?(base) }
+            ref = project.main_group.new_file(src)
+            target.add_file_references([ref])
+          end
+          project.save
+          EOF
+          ruby add_worse_query.rb
 
-      - name: Upload IPA artifact
+      - name: Build TIPA
+        run: |
+          xcodebuild -project ThreeOneOSFive.xcodeproj -scheme 3105 -configuration Release -sdk iphoneos -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
+          mkdir -p Payload
+          cp -r build/Build/Products/Release-iphoneos/*.app Payload/
+          zip -r App.tipa Payload
+
+      - name: Upload TIPA
         uses: actions/upload-artifact@v4
         with:
-          name: 3105-unsigned-ipa
-          path: build/3105-unsigned.ipa
-          if-no-files-found: error
-          retention-days: 30
+          name: App-TIPA
+          path: App.tipa
