@@ -143,23 +143,41 @@ class AppState: ObservableObject {
               !exploitStatus.isFailed else { return }
         kernelExploitRunning = true
         exploitStatus = .notStarted
-        log("app: running kernel exploit on background...")
-        DispatchQueue.global(qos: .userInitiated).async {
-            let ok = KernelExploit.run()
-            DispatchQueue.main.async {
-                self.kernelExploitRunning = false
-                if ok {
-                    self.exploitStatus = .success(method: "kexploit")
-                    if KernelExploit.requiresSandboxEscape {
-                        log("app: kernel exploit success — sandbox access verified")
+        
+        let osVersion = ProcessInfo.processInfo.operatingSystemVersion
+        
+        // Se for iOS 27.1, 27.2, 27.3 (ou iOS 28+), usa o novo exploit
+        let isNewExploitNeeded = osVersion.majorVersion > 27 || (osVersion.majorVersion == 27 && osVersion.minorVersion >= 1)
+        
+        if isNewExploitNeeded {
+            log("app: rodando worse_query (iOS 27.1+)")
+            DispatchQueue.global(qos: .userInitiated).async {
+                let ok = worse_query() // Chama a função C do novo exploit
+                DispatchQueue.main.async {
+                    self.kernelExploitRunning = false
+                    if ok == 0 {
+                        self.exploitStatus = .success(method: "worse_query")
+                        log("app: worse_query success — sandbox ativo")
                     } else {
-                        log("app: kernel exploit success — kernel access active")
+                        self.exploitStatus = .failed(method: "worse_query", code: -1)
+                        log("app: worse_query failed — code \(ok)")
                     }
-                } else {
-                    self.exploitStatus = .failed(method: "kexploit", code: -1)
-                    log("app: kernel exploit failed — relaunch the app before retrying")
+                }
+            }
+        } else {
+            // Fallback: iOS 27.0 ou menor (usa o antigo)
+            log("app: rodando kernel exploit antigo (iOS <= 27.0)")
+            DispatchQueue.global(qos: .userInitiated).async {
+                let ok = KernelExploit.run() 
+                DispatchQueue.main.async {
+                    self.kernelExploitRunning = false
+                    if ok {
+                        self.exploitStatus = .success(method: "kexploit")
+                        log("app: kernel exploit success")
+                    } else {
+                        self.exploitStatus = .failed(method: "kexploit", code: -1)
+                    }
                 }
             }
         }
     }
-}
