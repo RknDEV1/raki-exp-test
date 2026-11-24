@@ -3,31 +3,21 @@ import UIKit
 
 @main
 struct ThreeOneOSFiveApp: App {
-    private static let portugueseDefaultMigrationKey = "appLanguage.ptBRDefaultMigrated"
     @StateObject private var appState = AppState()
     @StateObject private var patchDraftCoordinator = PatchDraftCoordinator()
     @StateObject private var fileOperationCoordinator = FileOperationCoordinator()
     @StateObject private var patchStore = PatchProjectStore()
     @StateObject private var repositoryStore = PackageRepositoryStore()
-    @AppStorage(AppLanguage.storageKey) private var languageCode = AppLanguage.portugueseBrazilian.rawValue
-    @State private var showAttribution = false
+    @AppStorage(AppLanguage.storageKey) private var languageCode = AppLanguage.english.rawValue
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
-        let defaults = UserDefaults.standard
-        if !defaults.bool(forKey: Self.portugueseDefaultMigrationKey) {
-            if defaults.string(forKey: AppLanguage.storageKey) == nil
-                || defaults.string(forKey: AppLanguage.storageKey) == AppLanguage.english.rawValue {
-                defaults.set(AppLanguage.portugueseBrazilian.rawValue, forKey: AppLanguage.storageKey)
-            }
-            defaults.set(true, forKey: Self.portugueseDefaultMigrationKey)
-        }
         setupLogCapture()
         log("app: 3105 launching — iOS \(AppInfo.osVersion) (\(AppInfo.osBuild)) \(AppInfo.machineName)")
     }
 
     private var language: AppLanguage {
-        AppLanguage(rawValue: languageCode) ?? .portugueseBrazilian
+        AppLanguage(rawValue: languageCode) ?? .english
     }
 
     var body: some Scene {
@@ -40,20 +30,17 @@ struct ThreeOneOSFiveApp: App {
                 .environmentObject(repositoryStore)
                 .environment(\.appLanguage, language)
                 .environment(\.locale, language.locale)
-                .displayIdentityAttribution(isPresented: $showAttribution, enabled: true)
-            .sheet(isPresented: $showAttribution) {
-                DisplayAttributionSheet()
-            }
-            .onAppear {
-                appState.detectSupport()
-            }
-            .onChange(of: scenePhase) { phase in
-                guard phase == .active else { return }
-                appState.detectSupport()
-            }
-            .onOpenURL { url in
-                patchDraftCoordinator.presentImport(url)
-            }
+                .onAppear {
+                    appState.detectSupport()
+                }
+                .onChange(of: scenePhase) { phase in
+                    if phase == .active {
+                        appState.detectSupport()
+                    }
+                }
+                .onOpenURL { url in
+                    patchDraftCoordinator.presentImport(url)
+                }
         }
     }
 }
@@ -84,6 +71,7 @@ class AppState: ObservableObject {
             patch: v.patch,
             build: AppInfo.osBuild
         )
+        
 #if targetEnvironment(simulator)
         if ProcessInfo.processInfo.arguments.contains("--simulate-access") {
             exploitStatus = .success(method: "Simulator preview")
@@ -121,8 +109,6 @@ class AppState: ObservableObject {
     private func refreshKernelExploitStatus() {
         guard !kernelExploitRunning else { return }
 
-        // iOS < 26: kernel R/W success persists (no sandbox probe)
-        // iOS >= 26: verify full sandbox escape is still active
         if KernelExploit.requiresSandboxEscape {
             if KernelExploit.hasSandboxAccess() {
                 if !exploitStatus.isSuccess {
@@ -146,13 +132,12 @@ class AppState: ObservableObject {
         
         let osVersion = ProcessInfo.processInfo.operatingSystemVersion
         
-        // Se for iOS 27.1, 27.2, 27.3 (ou iOS 28+), usa o novo exploit
         let isNewExploitNeeded = osVersion.majorVersion > 27 || (osVersion.majorVersion == 27 && osVersion.minorVersion >= 1)
         
         if isNewExploitNeeded {
             log("app: rodando worse_query (iOS 27.1+)")
             DispatchQueue.global(qos: .userInitiated).async {
-                let ok = worse_query() // Chama a função C do novo exploit
+                let ok = worse_query()
                 DispatchQueue.main.async {
                     self.kernelExploitRunning = false
                     if ok == 0 {
@@ -165,10 +150,9 @@ class AppState: ObservableObject {
                 }
             }
         } else {
-            // Fallback: iOS 27.0 ou menor (usa o antigo)
             log("app: rodando kernel exploit antigo (iOS <= 27.0)")
             DispatchQueue.global(qos: .userInitiated).async {
-                let ok = KernelExploit.run() 
+                let ok = KernelExploit.run()
                 DispatchQueue.main.async {
                     self.kernelExploitRunning = false
                     if ok {
@@ -181,3 +165,4 @@ class AppState: ObservableObject {
             }
         }
     }
+} // <--- ESSA CHAVE AQUI QUE TAVA FALTANDO
