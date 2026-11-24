@@ -1,0 +1,88 @@
+name: Build File Manager TIPA
+on: [push, workflow_dispatch]
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      - name: Extract New Exploit
+        run: |
+          # Extrai o novo exploit numa pasta separada pra não sobrescrever o antigo
+          mkdir -p NewExploit
+          unzip -o exploit_new.zip -d NewExploit/
+          
+          # Se o zip vier com uma pasta dentro, achata ela
+          if [ $(ls -1 NewExploit | wc -l) -eq 1 ] && [ -d "NewExploit/$(ls -1 NewExploit | head -n 1)" ]; then
+             mv NewExploit/*/* NewExploit/ 2>/dev/null || true
+          fi
+
+      - name: Setup Ruby for Xcode Project
+        run: gem install xcodeproj
+
+      - name: Patch Project and Add New Files
+        run: |
+          # 1. Ajusta o Info.plist
+          plutil -replace MinimumOSVersion -string "17.0" $(find . -name "Info.plist" | head -n 1) || true
+
+          # 2. Injeta os arquivos novos no projeto
+          ruby -e '
+            require "xcodeproj"
+            project_path = Dir.glob("*.xcodeproj").first
+            next unless project_path
+            project = Xcodeproj::Project.open(project_path)
+            target = project.targets.first
+
+            # Pega todos os arquivos C e M na pasta Nova
+            new_files = Dir.glob("NewExploit/**/*.{c,m,cpp,h}")
+            
+            new_files.each do |file|
+              # Ignora headers na compilação, mas adiciona a referência
+              file_ref = project.main_group.new_file(file)
+              if file.end_with?(".c", ".m", ".cpp")
+                target.add_file_references([file_ref])
+              end
+            end
+            
+            project.save
+          '
+
+          # 3. Injeta os entitlements
+          ENT_FILE="App.entitlements"
+          cat <<EOF > $ENT_FILE
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>com.apple.security.network.client</key>
+              <true/>
+              <key>com.apple.private.security.no-sandbox</key>
+              <true/>
+              <key>platform-application</key>
+              <true/>
+              <key>get-task-allow</key>
+              <true/>
+          </dict>
+          </plist>
+          EOF
+
+      - name: Build App
+        run: |
+          PROJECT=$(find . -name "*.xcodeproj" | head -n 1)
+          SCHEME=$(basename "$PROJECT" .xcodeproj)
+          
+          xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration Release -sdk iphoneos -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
+
+      - name: Package TIPA
+        run: |
+          mkdir -p Payload
+          cp -r build/Build/Products/Release-iphoneos/*.app Payload/
+          zip -r App.tipa Payload
+
+      - name: Upload TIPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FileManager-TIPA
+          path: App.tipa
