@@ -1,4 +1,4 @@
-name: Build iOS with Worse_Query
+name: Build iOS TIPA
 on: [push, workflow_dispatch]
 
 jobs:
@@ -8,41 +8,34 @@ jobs:
       - name: Checkout Repo
         uses: actions/checkout@v4
 
-      - name: Extract Exploit
+      - name: Setup Exploit Folder
         run: |
           mkdir -p ThreeOneOSFive/worse_query
+          # Descompacta o exploit novo (ajuste o nome se o teu zip for diferente)
           unzip -o worse_query.zip -d ThreeOneOSFive/worse_query/ || true
           if [ -d "ThreeOneOSFive/worse_query/worse_query-main" ]; then mv ThreeOneOSFive/worse_query/worse_query-main/* ThreeOneOSFive/worse_query/; fi
 
-      - name: Install Ruby Gem
+      - name: Setup Ruby
         run: gem install xcodeproj
 
-      - name: Run Grok Script
+      - name: Inject Exploit via Ruby
         run: |
-          cat << 'EOF' > add_worse_query.rb
-          require 'xcodeproj'
-          require 'pathname'
-          PROJECT_PATH = File.expand_path('ThreeOneOSFive.xcodeproj', __dir__)
-          TARGET_NAME  = '3105'
-          EXPLOIT_REL  = 'ThreeOneOSFive/worse_query'
-          project = Xcodeproj::Project.open(PROJECT_PATH)
-          target  = project.targets.find { |t| t.name == TARGET_NAME } || project.targets.first
-          proj_dir = Pathname.new(PROJECT_PATH).parent
-          exploit_fs = proj_dir.join(EXPLOIT_REL)
-          sources = Dir.glob(exploit_fs.join('**', '*')).select { |p| %w[.c .m .mm .cpp].include?(File.extname(p).downcase) }
-          sources.each do |src|
-            base = File.basename(src)
-            next if target.source_build_phase.files.any? { |bf| bf.file_ref&.path&.end_with?(base) }
-            ref = project.main_group.new_file(src)
-            target.add_file_references([ref])
-          end
-          project.save
-          EOF
-          ruby add_worse_query.rb
+          ruby -e '
+            require "xcodeproj"
+            project = Xcodeproj::Project.open("ThreeOneOSFive.xcodeproj")
+            target = project.targets.find { |t| t.name == "3105" } || project.targets.first
+            Dir.glob("ThreeOneOSFive/worse_query/**/*.{c,m,cpp}").each do |file|
+              ref = project.main_group.new_file(file)
+              target.add_file_references([ref])
+            end
+            project.save
+          '
 
       - name: Build TIPA
         run: |
+          # Ajuste o scheme se o nome for outro
           xcodebuild -project ThreeOneOSFive.xcodeproj -scheme 3105 -configuration Release -sdk iphoneos -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
+          
           mkdir -p Payload
           cp -r build/Build/Products/Release-iphoneos/*.app Payload/
           zip -r App.tipa Payload
