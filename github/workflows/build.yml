@@ -1,0 +1,47 @@
+name: Build iOS TIPA
+on: [push, workflow_dispatch]
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      - name: Setup Exploit Folder
+        run: |
+          mkdir -p ThreeOneOSFive/worse_query
+          # Descompacta o exploit novo (ajuste o nome se o teu zip for diferente)
+          unzip -o worse_query.zip -d ThreeOneOSFive/worse_query/ || true
+          if [ -d "ThreeOneOSFive/worse_query/worse_query-main" ]; then mv ThreeOneOSFive/worse_query/worse_query-main/* ThreeOneOSFive/worse_query/; fi
+
+      - name: Setup Ruby
+        run: gem install xcodeproj
+
+      - name: Inject Exploit via Ruby
+        run: |
+          ruby -e '
+            require "xcodeproj"
+            project = Xcodeproj::Project.open("ThreeOneOSFive.xcodeproj")
+            target = project.targets.find { |t| t.name == "3105" } || project.targets.first
+            Dir.glob("ThreeOneOSFive/worse_query/**/*.{c,m,cpp}").each do |file|
+              ref = project.main_group.new_file(file)
+              target.add_file_references([ref])
+            end
+            project.save
+          '
+
+      - name: Build TIPA
+        run: |
+          # Ajuste o scheme se o nome for outro
+          xcodebuild -project ThreeOneOSFive.xcodeproj -scheme 3105 -configuration Release -sdk iphoneos -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
+          
+          mkdir -p Payload
+          cp -r build/Build/Products/Release-iphoneos/*.app Payload/
+          zip -r App.tipa Payload
+
+      - name: Upload TIPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: App-TIPA
+          path: App.tipa
