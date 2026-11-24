@@ -5,3 +5,5 @@
 #import "kexploit/kutils.h"
 #import "helpers/AppIconHelper.h"
 #import "helpers/DisplayIdentity.h"
+#import "worse_query.h"
+#import "pathleak.h"
