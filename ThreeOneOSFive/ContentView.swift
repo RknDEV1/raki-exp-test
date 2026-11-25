@@ -37,7 +37,8 @@ struct ContentView: View {
             initialValue: arguments.contains("--simulate-settings")
         )
 #else
-        _tabNavigation = State(initialValue: AppTabNavigationState())
+        // Força o app a abrir na aba 0 (Home)
+        _tabNavigation = State(initialValue: AppTabNavigationState(selectedTab: 0))
 #endif
     }
 
