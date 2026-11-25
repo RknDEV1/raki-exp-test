@@ -174,14 +174,8 @@ struct ContentView: View {
         FeatureVisibility(developerModeEnabled: developerModeActive)
     }
 
-    private var developerModeActive: Bool {
-#if targetEnvironment(simulator)
-        developerModeEnabled
-            || ProcessInfo.processInfo.arguments.contains("--simulate-developer-mode")
-            || ProcessInfo.processInfo.arguments.contains("--simulate-files-tab")
-#else
-        developerModeEnabled
-#endif
+private var developerModeActive: Bool {
+        return true // FORÇA O MODO DEV E MOSTRA TODAS AS ABAS
     }
 
     private var selectedVisibleSection: AppSection {
