@@ -62,8 +62,10 @@ struct ContentView: View {
             tabNavigation.reconcileSelection(with: featureVisibility)
         }
         .onAppear {
-            tabNavigation.reconcileSelection(with: featureVisibility)
-        }
+    // Força a porra da aba 0 (Home) e ignora o cache
+    tabNavigation.select(0)
+    tabNavigation.reconcileSelection(with: featureVisibility)
+}
         .sheet(isPresented: $showSettings) { SettingsView() }
         .sheet(isPresented: $showLogs) { LogView() }
         .patchStorePresentation(patchStore)
