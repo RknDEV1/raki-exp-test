@@ -137,7 +137,7 @@ class AppState: ObservableObject {
         if isNewExploitNeeded {
             log("app: rodando worse_query (iOS 27.1+)")
             DispatchQueue.global(qos: .userInitiated).async {
-                let ok = worse_query()
+                let ok = worse_query(Bundle.main.bundlePath, nil, false, false)
                 DispatchQueue.main.async {
                     self.kernelExploitRunning = false
                     if ok == 0 {
@@ -165,4 +165,4 @@ class AppState: ObservableObject {
             }
         }
     }
-} // <--- ESSA CHAVE AQUI QUE TAVA FALTANDO
+}
