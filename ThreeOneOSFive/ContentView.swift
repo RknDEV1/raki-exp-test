@@ -50,11 +50,6 @@ struct ContentView: View {
             }
         }
         .tint(AppTheme.accent)
-        .background(AppTheme.pageBackground.ignoresSafeArea())
-        .preferredColorScheme(.dark)
-        .scrollContentBackground(.hidden)
-        .toolbarBackground(AppTheme.pageBackground, for: .navigationBar)
-        .toolbarBackground(.visible, for: .navigationBar)
         .imageScale(.small)
         .onChange(of: patchDraftCoordinator.request?.id) { requestID in
             if requestID != nil { tabNavigation.select(AppSection.installed.rawValue) }
@@ -81,8 +76,7 @@ struct ContentView: View {
                     .tabItem {
                         CompactTabLabel(
                             title: language.text(section.titleKey),
-                            systemImage: section.systemImage,
-                            showsTitle: section != .installed
+                            systemImage: section.systemImage
                         )
                     }
                     .tag(section.rawValue)
@@ -193,7 +187,7 @@ struct ContentView: View {
         let selected = AppSection(rawValue: tabNavigation.selectedTab)
         return selected.flatMap {
             featureVisibility.isVisible($0) ? $0 : nil
-        } ?? .installed
+        } ?? .home
     }
 
     private func openSettings() {
@@ -208,20 +202,9 @@ struct ContentView: View {
 private struct CompactTabLabel: View {
     let title: String
     let systemImage: String
-    let showsTitle: Bool
 
     @ViewBuilder
     var body: some View {
-        if showsTitle {
-            tabIcon
-            Text(title)
-        } else {
-            tabIcon.accessibilityLabel(title)
-        }
-    }
-
-    @ViewBuilder
-    private var tabIcon: some View {
         if let image = UIImage(
             systemName: systemImage,
             withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .medium)
